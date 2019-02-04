@@ -1,28 +1,31 @@
 #!/usr/bin/env python
 
-import torch
+# * Learn AND
+# * Learn it with fewer layers
+
+from torch import nn, no_grad, randn
 
 # N is batch size; D_in is input dimension;
 # H is hidden dimension; D_out is output dimension.
 N, D_in, H, D_out = 64, 1000, 100, 10
 
 # Create random Tensors to hold inputs and outputs
-x = torch.randn(N, D_in)
-y = torch.randn(N, D_out)
+x = randn(N, D_in)
+y = randn(N, D_out)
 
 # Use the nn package to define our model as a sequence of layers. nn.Sequential
 # is a Module which contains other Modules, and applies them in sequence to
 # produce its output. Each Linear Module computes output from input using a
 # linear function, and holds internal Tensors for its weight and bias.
-model = torch.nn.Sequential(
-    torch.nn.Linear(D_in, H),
-    torch.nn.ReLU(),
-    torch.nn.Linear(H, D_out),
+model = nn.Sequential(
+    nn.Linear(D_in, H),
+    nn.ReLU(),
+    nn.Linear(H, D_out),
 )
 
 # The nn package also contains definitions of popular loss functions; in this
 # case we will use Mean Squared Error (MSE) as our loss function.
-loss_fn = torch.nn.MSELoss(reduction='sum')
+loss_fn = nn.MSELoss(reduction='sum')
 
 learning_rate = 1e-4
 for t in range(500):
@@ -49,6 +52,6 @@ for t in range(500):
 
     # Update the weights using gradient descent. Each parameter is a Tensor, so
     # we can access its gradients like we did before.
-    with torch.no_grad():
+    with no_grad():
         for param in model.parameters():
             param -= learning_rate * param.grad
