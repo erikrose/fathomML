@@ -7,7 +7,7 @@ from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss
 
 # Training data for NAND.
 x = tensor([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=torch.float)
-y = tensor([[1], [1], [1], [0]], dtype=torch.float)
+y = tensor([[0], [0], [0], [1]], dtype=torch.float)
 
 # Define a neural network using high-level modules.
 model = Sequential(
@@ -31,5 +31,5 @@ for t in range(500):
             param -= learning_rate * param.grad   # Update the parameters using SGD.
 
 
-# Apply it to [1, 0]:
-print(model(tensor([[1, 0]], dtype=torch.float)).sigmoid().item())
+# Apply it:
+print(model(tensor([[0, 0]], dtype=torch.float)).sigmoid().item())
