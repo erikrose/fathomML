@@ -6,8 +6,8 @@ from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss
 
 
 # Training data for NAND.
-x = tensor([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=torch.float)
-y = tensor([[0], [0], [0], [1]], dtype=torch.float)
+x = tensor([[0, 0], [0, 1], [1, 0], [1, 1], [1, 1], [1, 1], [1, 1]], dtype=torch.float)
+y = tensor([[0], [0], [0], [1], [1], [1], [0]], dtype=torch.float)
 
 # Define a neural network using high-level modules.
 model = Sequential(
@@ -33,3 +33,9 @@ for t in range(500):
 
 # Apply it:
 print(model(tensor([[0, 0]], dtype=torch.float)).sigmoid().item())
+print(model(tensor([[1, 1]], dtype=torch.float)).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
+
+
+
+# Strategy: 1 input neuron for each feature. Train the model on all the features of one tag. Then the next. 1 output neuron, which is "is the price". Or should I have 2 output nodes, 1 for "no" and one for "yes"? Would that help me tell when something has gone wrong?
+# Consider: passing a weight= or pos_weight= kwarg to BCEWithLogitsLoss to make the tags that should trigger a 1 output louder. This trades off precision and recall.
