@@ -7,8 +7,23 @@ import torch
 from torch import no_grad, randn, tensor
 from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss
 
+
+def pages_from_file(filename):
+    return load(open(argv[1]))
+
+
 def training_tensors(filename):
     """Return (inputs, correct outputs) tuple of training tensors."""
+    xs = []
+    ys = []
+    for page in pages_from_file(filename):
+        for tag in page['nodes']:
+            xs.append(tag['features'])
+            ys.append([1 if tag['isTarget'] else 0])  # TODO: try 0.1 and 0.9 instead
+    return tensor(xs, dtype=torch.float), tensor(ys, dtype=torch.float)
+
+
+def training_tensors_per_page(filename):
     raw_vectors = load(open(argv[1]))
     xs = []
     ys = []
@@ -28,7 +43,7 @@ def learn(x, y):
     # sigmoid then binary cross-entropy loss
     loss_fn = BCEWithLogitsLoss(size_average=False)
 
-    learning_rate = 0.5
+    learning_rate = 0.1
     for t in range(500):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
@@ -43,8 +58,12 @@ def learn(x, y):
 
     # Print coeffs:
     print(list(model.named_parameters()))
+    return model
 
-    # Apply it:
+
+def accuracy_per_tag(model, x, y):
+    """Return the accuracy 0..1 of the model on a per-tag basis, given input
+    and correct output tensors."""
     successes = 0
     for (i, input) in enumerate(x):
         if abs(model(input).sigmoid().item() - y[i].item()) < .001:
@@ -52,6 +71,22 @@ def learn(x, y):
     print('Accuracy:', successes / len(x))
     #print(model(tensor([[0.9,0.7729160745059742,0.9,0.08,0.9,0.08,0.14833333333333332,0.616949388442898,0.9]], dtype=torch.float)).sigmoid().item())
     #print(model(tensor([[1, 1]], dtype=torch.float)).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
+    return successes / len(x)
+
+
+def accuracy_per_page(model, pages):
+    """Return the accuracy 0..1 of the model on a per-page basis."""
+    successes = 0
+    for page in pages:
+        predictions = []
+        for tag in page['nodes']:
+            predictions.append({'prediction': model(tensor(tag['features'],
+                                                           dtype=torch.float)),
+                                'isTarget': tag['isTarget']})
+        predictions.sort(key=lambda x: x['prediction'], reverse=True)
+        if predictions[0]['isTarget']:
+            successes += 1
+    return successes / len(pages)
 
 
 # Strategy: 1 input neuron for each feature. Train the model on all the features of one tag. Then the next. 1 output neuron, which is "is the price". Or should I have 2 output nodes, 1 for "no" and one for "yes"? Would that help me tell when something has gone wrong?
@@ -59,9 +94,12 @@ def learn(x, y):
 
 
 def main():
-    x, y = training_tensors(argv[1])
-    learn(x, y)
-
+    filename = argv[1]
+    x, y = training_tensors(filename)
+    model = learn(x, y)
+    # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
+    print('Accuracy per tag:', accuracy_per_tag(model, x, y))
+    print('Accuracy per page:', accuracy_per_page(model, pages_from_file(filename)))
 
 if __name__ == '__main__':
     main()
