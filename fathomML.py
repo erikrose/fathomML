@@ -80,12 +80,20 @@ def accuracy_per_page(model, pages):
     for page in pages:
         predictions = []
         for tag in page['nodes']:
-            predictions.append({'prediction': model(tensor(tag['features'],
-                                                           dtype=torch.float)),
+            prediction = model(tensor(tag['features'],
+                                      dtype=torch.float)).sigmoid().item()
+            predictions.append({'prediction': prediction,
                                 'isTarget': tag['isTarget']})
         predictions.sort(key=lambda x: x['prediction'], reverse=True)
         if predictions[0]['isTarget']:
+            print('Success. Confidence:', predictions[0]['prediction'])
             successes += 1
+        else:
+            print('FAILURE. Confidence:', predictions[0]['prediction'])
+            for i, p in enumerate(predictions):
+                if p['isTarget']:
+                    print('    First success at index', i, p['prediction'])
+                    break
     return successes / len(pages)
 
 
