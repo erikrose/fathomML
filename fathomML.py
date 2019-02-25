@@ -59,6 +59,7 @@ def learn(x, y):
         with no_grad():
             for param in model.parameters():
                 param -= learning_rate * param.grad   # Update the parameters using SGD.
+        learning_rate *= .99  # exponential decay: .0007 by 500 iterations
 
     # Print coeffs:
     print(list(model.named_parameters()))
@@ -112,7 +113,7 @@ def main():
     model = learn(x, y)
     # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
     print('Accuracy per tag:', accuracy_per_tag(model, x, y))
-    print('Accuracy per page:', accuracy_per_page(model, pages_from_file(filename)))
+    #print('Accuracy per page:', accuracy_per_page(model, pages_from_file(filename)))
 
 if __name__ == '__main__':
     main()
