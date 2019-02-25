@@ -3,6 +3,7 @@
 from json import load
 from sys import argv
 
+from tensorboardX import SummaryWriter
 import torch
 from torch import no_grad, randn, tensor
 from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss
@@ -36,6 +37,7 @@ def training_tensors_per_page(filename):
 
 def learn(x, y):
     # Define a neural network using high-level modules.
+    writer = SummaryWriter()
     model = Sequential(
         Linear(len(x[0]), len(y[0]), bias=True)  # 9 inputs -> 1 output
     )
@@ -47,6 +49,8 @@ def learn(x, y):
     for t in range(500):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
+        writer.add_scalar('loss', loss, t)
+        writer.add_scalar('training_accuracy_per_tag', accuracy_per_tag(model, x, y), t)
         #print(t, loss.item())
 
         model.zero_grad()                   # Zero-clear the gradients.
@@ -58,6 +62,10 @@ def learn(x, y):
 
     # Print coeffs:
     print(list(model.named_parameters()))
+    #print(model(tensor([[0.9,0.7729160745059742,0.9,0.08,0.9,0.08,0.14833333333333332,0.616949388442898,0.9]], dtype=torch.float)).sigmoid().item())
+    #print(model(tensor([[1, 1]], dtype=torch.float)).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
+    writer.export_scalars_to_json("./all_scalars.json")
+    writer.close()
     return model
 
 
@@ -68,9 +76,6 @@ def accuracy_per_tag(model, x, y):
     for (i, input) in enumerate(x):
         if abs(model(input).sigmoid().item() - y[i].item()) < .001:
             successes += 1
-    print('Accuracy:', successes / len(x))
-    #print(model(tensor([[0.9,0.7729160745059742,0.9,0.08,0.9,0.08,0.14833333333333332,0.616949388442898,0.9]], dtype=torch.float)).sigmoid().item())
-    #print(model(tensor([[1, 1]], dtype=torch.float)).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
     return successes / len(x)
 
 
