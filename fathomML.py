@@ -17,11 +17,14 @@ def training_tensors(filename):
     """Return (inputs, correct outputs) tuple of training tensors."""
     xs = []
     ys = []
+    num_targets = 0
     for page in pages_from_file(filename):
         for tag in page['nodes']:
             xs.append(tag['features'])
-            ys.append([1 if tag['isTarget'] else 0])  # TODO: try 0.1 and 0.9 instead
-    return tensor(xs, dtype=torch.float), tensor(ys, dtype=torch.float)
+            ys.append([1 if tag['isTarget'] else 0])  # Tried 0.1 and 0.9 instead. Was much worse.
+            if tag['isTarget']:
+                num_targets += 1
+    return tensor(xs, dtype=torch.float), tensor(ys, dtype=torch.float), num_targets
 
 
 def training_tensors_per_page(filename):
@@ -35,15 +38,15 @@ def training_tensors_per_page(filename):
     return tensor(xs, dtype=torch.float), tensor(ys, dtype=torch.float)
 
 
-def learn(x, y):
+def learn(x, y, num_targets, run_comment=''):
     # Define a neural network using high-level modules.
-    writer = SummaryWriter()
+    writer = SummaryWriter(comment=run_comment)
     model = Sequential(
         Linear(len(x[0]), len(y[0]), bias=True)  # 9 inputs -> 1 output
     )
 
     # sigmoid then binary cross-entropy loss
-    loss_fn = BCEWithLogitsLoss(size_average=False)
+    loss_fn = BCEWithLogitsLoss(size_average=False, pos_weight=tensor([1/(num_targets/len(y))], dtype=torch.float))
 
     learning_rate = 0.1
     for t in range(500):
@@ -109,8 +112,12 @@ def accuracy_per_page(model, pages):
 
 def main():
     filename = argv[1]
-    x, y = training_tensors(filename)
-    model = learn(x, y)
+    if len(argv) > 2:
+        run_comment = argv[2]
+    else:
+        run_comment = ''
+    x, y, num_targets = training_tensors(filename)
+    model = learn(x, y, num_targets, run_comment=run_comment)
     # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
     print('Accuracy per tag:', accuracy_per_tag(model, x, y))
     #print('Accuracy per page:', accuracy_per_page(model, pages_from_file(filename)))
