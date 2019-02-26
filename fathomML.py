@@ -6,7 +6,7 @@ from sys import argv
 from tensorboardX import SummaryWriter
 import torch
 from torch import no_grad, randn
-from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss
+from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss, L1Loss
 
 
 def tensor(some_list):
@@ -50,9 +50,9 @@ def learn(x, y, num_targets, run_comment=''):
     )
 
     # sigmoid then binary cross-entropy loss
-    loss_fn = BCEWithLogitsLoss(reduction='sum', pos_weight=tensor([len(y) / num_targets]))
+    loss_fn = L1Loss(reduction='sum')
 
-    learning_rate = 1
+    learning_rate = .1
     for t in range(500):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
@@ -66,7 +66,7 @@ def learn(x, y, num_targets, run_comment=''):
         with no_grad():
             for param in model.parameters():
                 param -= learning_rate * param.grad   # Update the parameters using SGD.
-        learning_rate *= .995  # exponential decay
+        learning_rate -= .001
 
     # Print coeffs:
     print(list(model.named_parameters()))
