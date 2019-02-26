@@ -52,7 +52,7 @@ def learn(x, y, num_targets, run_comment=''):
     # sigmoid then binary cross-entropy loss
     loss_fn = BCEWithLogitsLoss(reduction='sum', pos_weight=tensor([len(y) / num_targets]))
 
-    learning_rate = 0.1
+    learning_rate = 1
     for t in range(500):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
