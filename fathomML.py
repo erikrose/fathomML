@@ -5,9 +5,13 @@ from sys import argv
 
 from tensorboardX import SummaryWriter
 import torch
-from torch import no_grad, randn, tensor
+from torch import no_grad, randn
 from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss
 
+
+def tensor(some_list):
+    """Cast a list to a tensor of the proper type for our problem."""
+    return torch.tensor(some_list, dtype=torch.float)
 
 def pages_from_file(filename):
     return load(open(argv[1]))
@@ -24,7 +28,7 @@ def training_tensors(filename):
             ys.append([1 if tag['isTarget'] else 0])  # Tried 0.1 and 0.9 instead. Was much worse.
             if tag['isTarget']:
                 num_targets += 1
-    return tensor(xs, dtype=torch.float), tensor(ys, dtype=torch.float), num_targets
+    return tensor(xs), tensor(ys), num_targets
 
 
 def training_tensors_per_page(filename):
@@ -35,7 +39,7 @@ def training_tensors_per_page(filename):
         for tag in page['nodes']:
             xs.append(tag['features'])
             ys.append([1 if tag['isTarget'] else 0])  # TODO: try 0.1 and 0.9 instead
-    return tensor(xs, dtype=torch.float), tensor(ys, dtype=torch.float)
+    return tensor(xs), tensor(ys)
 
 
 def learn(x, y, num_targets, run_comment=''):
@@ -46,7 +50,7 @@ def learn(x, y, num_targets, run_comment=''):
     )
 
     # sigmoid then binary cross-entropy loss
-    loss_fn = BCEWithLogitsLoss(size_average=False, pos_weight=tensor([1/(num_targets/len(y))], dtype=torch.float))
+    loss_fn = BCEWithLogitsLoss(size_average=False, pos_weight=tensor([1/(num_targets/len(y))]))
 
     learning_rate = 0.1
     for t in range(500):
@@ -66,8 +70,8 @@ def learn(x, y, num_targets, run_comment=''):
 
     # Print coeffs:
     print(list(model.named_parameters()))
-    #print(model(tensor([[0.9,0.7729160745059742,0.9,0.08,0.9,0.08,0.14833333333333332,0.616949388442898,0.9]], dtype=torch.float)).sigmoid().item())
-    #print(model(tensor([[1, 1]], dtype=torch.float)).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
+    #print(model(tensor([[0.9,0.7729160745059742,0.9,0.08,0.9,0.08,0.14833333333333332,0.616949388442898,0.9]])).sigmoid().item())
+    #print(model(tensor([[1, 1]])).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
     writer.export_scalars_to_json("./all_scalars.json")
     writer.close()
     return model
