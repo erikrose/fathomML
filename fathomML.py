@@ -66,7 +66,7 @@ def learn(x, y, num_targets, run_comment=''):
         with no_grad():
             for param in model.parameters():
                 param -= learning_rate * param.grad   # Update the parameters using SGD.
-        learning_rate *= .99  # exponential decay: .0007 by 500 iterations
+        learning_rate *= .995  # exponential decay
 
     # Print coeffs:
     print(list(model.named_parameters()))
