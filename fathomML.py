@@ -18,7 +18,8 @@ def pages_from_file(filename):
 
 
 def training_tensors(filename):
-    """Return (inputs, correct outputs) tuple of training tensors."""
+    """Return (inputs, correct outputs, number of tags that are recognition targets)
+    tuple of training tensors."""
     xs = []
     ys = []
     num_targets = 0
@@ -49,7 +50,6 @@ def learn(x, y, num_targets, run_comment=''):
         Linear(len(x[0]), len(y[0]), bias=True)  # 9 inputs -> 1 output
     )
 
-    # sigmoid then binary cross-entropy loss
     loss_fn = L1Loss(reduction='sum')
 
     learning_rate = .1
@@ -58,7 +58,9 @@ def learn(x, y, num_targets, run_comment=''):
         loss = loss_fn(y_pred, y)           # Compute the loss.
         writer.add_scalar('loss', loss, t)
         writer.add_scalar('training_accuracy_per_tag', accuracy_per_tag(model, x, y), t)
-        #print(t, loss.item())
+        # See if values are getting super small or large and floating point
+        # precision limits are taking over and making the loss function grow:
+        writer.add_scalar('coeff_abs_sum', list(model.parameters())[0].abs().sum().item(), t)
 
         model.zero_grad()                   # Zero-clear the gradients.
         loss.backward()                     # Compute the gradients.
@@ -93,8 +95,7 @@ def accuracy_per_page(model, pages):
     for page in pages:
         predictions = []
         for tag in page['nodes']:
-            prediction = model(tensor(tag['features'],
-                                      dtype=torch.float)).sigmoid().item()
+            prediction = model(tensor(tag['features'])).sigmoid().item()
             predictions.append({'prediction': prediction,
                                 'isTarget': tag['isTarget']})
         predictions.sort(key=lambda x: x['prediction'], reverse=True)
