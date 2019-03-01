@@ -73,7 +73,7 @@ def offness_per_tag(model, x, y):
     """Return the average absolute offness of the prediction."""
     offness = 0
     for (i, input) in enumerate(x):
-        offness += abs(model(input).item() - y[i].item())
+        offness += abs(model(input).sigmoid().item() - y[i].item())
     return offness / len(x)
 
 
