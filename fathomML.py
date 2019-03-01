@@ -13,6 +13,7 @@ def tensor(some_list):
     """Cast a list to a tensor of the proper type for our problem."""
     return torch.tensor(some_list, dtype=torch.float)
 
+
 def pages_from_file(filename):
     return load(open(argv[1]))
 
@@ -32,17 +33,6 @@ def training_tensors(filename):
     return tensor(xs), tensor(ys), num_targets
 
 
-def training_tensors_per_page(filename):
-    raw_vectors = load(open(argv[1]))
-    xs = []
-    ys = []
-    for page in raw_vectors:
-        for tag in page['nodes']:
-            xs.append(tag['features'])
-            ys.append([1 if tag['isTarget'] else 0])  # TODO: try 0.1 and 0.9 instead
-    return tensor(xs), tensor(ys)
-
-
 def learn(x, y, num_targets, run_comment=''):
     # Define a neural network using high-level modules.
     writer = SummaryWriter(comment=run_comment)
@@ -50,14 +40,15 @@ def learn(x, y, num_targets, run_comment=''):
         Linear(len(x[0]), len(y[0]), bias=True)  # 9 inputs -> 1 output
     )
 
-    loss_fn = L1Loss(reduction='sum')
+    loss_fn = L1Loss(reduction='sum')  # TODO: Try BCE again.
 
     learning_rate = .1
-    for t in range(500):
+    for t in range(1000):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
         writer.add_scalar('loss', loss, t)
         writer.add_scalar('training_accuracy_per_tag', accuracy_per_tag(model, x, y), t)
+        writer.add_scalar('avg_abs_offness_per_tag', offness_per_tag(model, x, y), t)
         # See if values are getting super small or large and floating point
         # precision limits are taking over and making the loss function grow:
         writer.add_scalar('coeff_abs_sum', list(model.parameters())[0].abs().sum().item(), t)
@@ -68,7 +59,7 @@ def learn(x, y, num_targets, run_comment=''):
         with no_grad():
             for param in model.parameters():
                 param -= learning_rate * param.grad   # Update the parameters using SGD.
-        learning_rate -= .001
+        learning_rate *= .99
 
     # Print coeffs:
     print(list(model.named_parameters()))
@@ -79,12 +70,20 @@ def learn(x, y, num_targets, run_comment=''):
     return model
 
 
+def offness_per_tag(model, x, y):
+    """Return the average absolute offness of the prediction."""
+    offness = 0
+    for (i, input) in enumerate(x):
+        offness += abs(model(input).item() - y[i].item())
+    return offness / len(x)
+
+
 def accuracy_per_tag(model, x, y):
     """Return the accuracy 0..1 of the model on a per-tag basis, given input
     and correct output tensors."""
     successes = 0
     for (i, input) in enumerate(x):
-        if abs(model(input).sigmoid().item() - y[i].item()) < .001:
+        if abs(model(input).item() - y[i].item()) < .2:
             successes += 1
     return successes / len(x)
 
@@ -124,7 +123,7 @@ def main():
     x, y, num_targets = training_tensors(filename)
     model = learn(x, y, num_targets, run_comment=run_comment)
     # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
-    print('Accuracy per tag:', accuracy_per_tag(model, x, y))
+    print('Offness per tag:', offness_per_tag(model, x, y))
     #print('Accuracy per page:', accuracy_per_page(model, pages_from_file(filename)))
 
 if __name__ == '__main__':
