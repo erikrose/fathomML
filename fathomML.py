@@ -40,10 +40,10 @@ def learn(x, y, num_targets, run_comment=''):
         Linear(len(x[0]), len(y[0]), bias=True)  # 9 inputs -> 1 output
     )
 
-    loss_fn = L1Loss(reduction='sum')  # TODO: Try BCE again.
+    loss_fn = BCEWithLogitsLoss(reduction='sum')
 
     learning_rate = .1
-    for t in range(1000):
+    for t in range(250):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
         writer.add_scalar('loss', loss, t)
@@ -65,7 +65,6 @@ def learn(x, y, num_targets, run_comment=''):
     print(list(model.named_parameters()))
     #print(model(tensor([[0.9,0.7729160745059742,0.9,0.08,0.9,0.08,0.14833333333333332,0.616949388442898,0.9]])).sigmoid().item())
     #print(model(tensor([[1, 1]])).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
-    writer.export_scalars_to_json("./all_scalars.json")
     writer.close()
     return model
 
@@ -83,7 +82,7 @@ def accuracy_per_tag(model, x, y):
     and correct output tensors."""
     successes = 0
     for (i, input) in enumerate(x):
-        if abs(model(input).item() - y[i].item()) < .2:
+        if abs(model(input).sigmoid().item() - y[i].item()) < .2:
             successes += 1
     return successes / len(x)
 
