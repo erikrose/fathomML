@@ -5,7 +5,7 @@ from sys import argv
 
 from tensorboardX import SummaryWriter
 import torch
-from torch import no_grad, randn
+from torch import no_grad
 from torch.nn import Sequential, Linear, ReLU, MSELoss, BCEWithLogitsLoss, L1Loss
 
 
@@ -18,7 +18,7 @@ def pages_from_file(filename):
     return load(open(argv[1]))
 
 
-def training_tensors(filename):
+def tensors_from(filename):
     """Return (inputs, correct outputs, number of tags that are recognition targets)
     tuple of training tensors."""
     xs = []
@@ -33,20 +33,21 @@ def training_tensors(filename):
     return tensor(xs), tensor(ys), num_targets
 
 
-def learn(x, y, num_targets, run_comment=''):
+def learn(x, y, validation_ins, validation_outs, run_comment=''):
     # Define a neural network using high-level modules.
     writer = SummaryWriter(comment=run_comment)
     model = Sequential(
         Linear(len(x[0]), len(y[0]), bias=True)  # 9 inputs -> 1 output
     )
 
-    loss_fn = BCEWithLogitsLoss(reduction='sum')
+    loss_fn = BCEWithLogitsLoss(reduction='sum')  # reduction=mean converges slower.
 
     learning_rate = .1
     for t in range(250):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
         writer.add_scalar('loss', loss, t)
+        writer.add_scalar('validation_loss', loss_fn(model(validation_ins), validation_outs), t)
         writer.add_scalar('training_accuracy_per_tag', accuracy_per_tag(model, x, y), t)
         writer.add_scalar('avg_abs_offness_per_tag', offness_per_tag(model, x, y), t)
         # See if values are getting super small or large and floating point
@@ -63,8 +64,8 @@ def learn(x, y, num_targets, run_comment=''):
 
     # Print coeffs:
     print(list(model.named_parameters()))
-    #print(model(tensor([[0.9,0.7729160745059742,0.9,0.08,0.9,0.08,0.14833333333333332,0.616949388442898,0.9]])).sigmoid().item())
-    #print(model(tensor([[1, 1]])).sigmoid())  # This looks like a probability, as suggested by https://stackoverflow.com/a/43811697. That is, BCE + sigmoid = probability. Confidences for free?
+    # Horizontal axis is what confidence. Vertical is how many samples were that confidence.
+    writer.add_histogram('confidence', confidences(model, x), t)
     writer.close()
     return model
 
@@ -82,9 +83,13 @@ def accuracy_per_tag(model, x, y):
     and correct output tensors."""
     successes = 0
     for (i, input) in enumerate(x):
-        if abs(model(input).sigmoid().item() - y[i].item()) < .2:
+        if abs(model(input).sigmoid().item() - y[i].item()) < .2:  # TODO: Change to .5 to not demand such certainty.
             successes += 1
     return successes / len(x)
+
+
+def confidences(model, x):
+    return model(x).sigmoid()
 
 
 def accuracy_per_page(model, pages):
@@ -114,16 +119,20 @@ def accuracy_per_page(model, pages):
 
 
 def main():
-    filename = argv[1]
-    if len(argv) > 2:
-        run_comment = argv[2]
+    training_file = argv[1]
+    validation_file = argv[2]
+    if len(argv) > 3:
+        run_comment = argv[3]
     else:
         run_comment = ''
-    x, y, num_targets = training_tensors(filename)
-    model = learn(x, y, num_targets, run_comment=run_comment)
+    x, y, _ = tensors_from(training_file)
+    validation_ins, validation_outs, _ = tensors_from(validation_file)
+    model = learn(x, y, validation_ins, validation_outs, run_comment=run_comment)
     # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
-    print('Offness per tag:', offness_per_tag(model, x, y))
+    print('Training accuracy per tag:', accuracy_per_tag(model, x, y))
+    print('Validation accuracy per tag:', accuracy_per_tag(model, validation_ins, validation_outs))
     #print('Accuracy per page:', accuracy_per_page(model, pages_from_file(filename)))
+
 
 if __name__ == '__main__':
     main()
