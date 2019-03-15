@@ -15,7 +15,7 @@ def tensor(some_list):
 
 
 def pages_from_file(filename):
-    return load(open(argv[1]))
+    return load(open(filename, 'r'))
 
 
 def tensors_from(filename):
