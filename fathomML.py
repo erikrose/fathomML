@@ -43,7 +43,7 @@ def learn(x, y, validation_ins, validation_outs, run_comment=''):
     loss_fn = BCEWithLogitsLoss(reduction='sum')  # reduction=mean converges slower.
 
     learning_rate = .1
-    for t in range(1000):
+    for t in range(4000):
         y_pred = model(x)                   # Make predictions.
         loss = loss_fn(y_pred, y)           # Compute the loss.
         writer.add_scalar('loss', loss, t)
@@ -60,7 +60,8 @@ def learn(x, y, validation_ins, validation_outs, run_comment=''):
         with no_grad():
             for param in model.parameters():
                 param -= learning_rate * param.grad   # Update the parameters using SGD.
-        #learning_rate *= .99
+        if not t % 100:
+            print(t)
 
     # Print coeffs:
     print(list(model.named_parameters()))
@@ -131,7 +132,7 @@ def main():
     # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
     print('Training accuracy per tag:', accuracy_per_tag(model, x, y))
     print('Validation accuracy per tag:', accuracy_per_tag(model, validation_ins, validation_outs))
-    #print('Accuracy per page:', accuracy_per_page(model, pages_from_file(training_file)))
+    print('Accuracy per page:', accuracy_per_page(model, pages_from_file(training_file)))
 
 
 if __name__ == '__main__':
