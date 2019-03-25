@@ -14,17 +14,17 @@ def tensor(some_list):
     return torch.tensor(some_list, dtype=torch.float)
 
 
-def pages_from_file(filename):
+def data_from_file(filename):
     return load(open(filename, 'r'))
 
 
-def tensors_from(filename):
+def tensors_from(pages):
     """Return (inputs, correct outputs, number of tags that are recognition targets)
     tuple of training tensors."""
     xs = []
     ys = []
     num_targets = 0
-    for page in pages_from_file(filename):
+    for page in pages:
         for tag in page['nodes']:
             xs.append(tag['features'])
             ys.append([1 if tag['isTarget'] else 0])  # Tried 0.1 and 0.9 instead. Was much worse.
@@ -63,8 +63,6 @@ def learn(x, y, validation_ins, validation_outs, run_comment=''):
         if not t % 100:
             print(t)
 
-    # Print coeffs:
-    print(list(model.named_parameters()))
     # Horizontal axis is what confidence. Vertical is how many samples were that confidence.
     writer.add_histogram('confidence', confidences(model, x), t)
     writer.close()
@@ -115,8 +113,19 @@ def accuracy_per_page(model, pages):
     return successes / len(pages)
 
 
-# Strategy: 1 input neuron for each feature. Train the model on all the features of one tag. Then the next. 1 output neuron, which is "is the price". Or should I have 2 output nodes, 1 for "no" and one for "yes"? Would that help me tell when something has gone wrong?
 # Consider: passing a weight= or pos_weight= kwarg to BCEWithLogitsLoss to make the tags that should trigger a 1 output louder. This trades off precision and recall.
+
+
+def pretty_output(model, feature_names):
+    """Format coefficient and bias numbers for easy pasting into JS."""
+    dict_params = {}
+    for name, param in model.named_parameters():
+        dict_params[name] = param.data.tolist()
+    pretty_coeffs = '\n        '.join("['{k}', {v}],".format(k=k, v=v) for k, v in zip(feature_names, dict_params['0.weight'][0]))
+    return """Coeffs: [
+        {coeffs}
+    ]
+Bias: {bias}""".format(coeffs=pretty_coeffs, bias=dict_params['0.bias'][0])
 
 
 def main():
@@ -126,13 +135,15 @@ def main():
         run_comment = argv[3]
     else:
         run_comment = ''
-    x, y, _ = tensors_from(training_file)
-    validation_ins, validation_outs, _ = tensors_from(validation_file)
     model = learn(x, y, validation_ins, validation_outs, run_comment=run_comment)
+    training_data = data_from_file(training_file)
+    x, y, num_yes = tensors_from(training_data['pages'])
+    validation_ins, validation_outs, _ = tensors_from(data_from_file(validation_file)['pages'])
+    print(pretty_output(model, training_data['header']['featureNames']))
     # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
     print('Training accuracy per tag:', accuracy_per_tag(model, x, y))
     print('Validation accuracy per tag:', accuracy_per_tag(model, validation_ins, validation_outs))
-    print('Accuracy per page:', accuracy_per_page(model, pages_from_file(training_file)))
+    print('Accuracy per page:', accuracy_per_page(model, training_data['pages']))
 
 
 if __name__ == '__main__':
