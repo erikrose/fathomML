@@ -63,8 +63,6 @@ def learn(learning_rate, decay, iterations, x, y, validation=None, run_comment='
                 for param in model.parameters():
                     param -= learning_rate * param.grad   # Update the parameters using SGD.
             learning_rate *= decay
-            if not t % 100:
-                print(t, 'of', iterations, 'done.')
 
     # Horizontal axis is what confidence. Vertical is how many samples were that confidence.
     writer.add_histogram('confidence', confidences(model, x), t)
@@ -86,8 +84,9 @@ def confidences(model, x):
     return model(x).sigmoid()
 
 
-def accuracy_per_page(model, pages):
-    """Return the accuracy 0..1 of the model on a per-page basis."""
+def accuracy_per_page(model, pages, verbose=False):
+    """Return the accuracy 0..1 of the model on a per-page basis, assuming the
+    model is looking for the equivalent of Fathom's ``max(the type)``."""
     successes = 0
     for page in pages:
         predictions = []
@@ -96,15 +95,22 @@ def accuracy_per_page(model, pages):
             predictions.append({'prediction': prediction,
                                 'isTarget': tag['isTarget']})
         predictions.sort(key=lambda x: x['prediction'], reverse=True)
-        if predictions[0]['isTarget']:
-            print('Success. Confidence:', predictions[0]['prediction'])
+        succeeded = predictions[0]['isTarget']
+        if verbose:
+            print('{success_or_failure} on {file}. Confidence: {confidence}'.format(
+                    file=page['filename'],
+                    confidence=predictions[0]['prediction'],
+                    success_or_failure='Success' if succeeded else 'FAILURE'))
+        if succeeded:
             successes += 1
         else:
-            print('FAILURE. Confidence:', predictions[0]['prediction'])
-            for i, p in enumerate(predictions):
-                if p['isTarget']:
-                    print('    First success at index', i, p['prediction'])
-                    break
+            if verbose:
+                for i, p in enumerate(predictions):
+                    if p['isTarget']:
+                        print('    First target at index {index}: {confidence}'.format(
+                                index=i,
+                                confidence=p['prediction']))
+                        break
     return successes / len(pages)
 
 
@@ -123,7 +129,7 @@ Bias: {bias}""".format(coeffs=pretty_coeffs, bias=dict_params['0.bias'][0])
 @command()
 @argument('training_file',
           type=File('r'))
-@option('validation_file', '-v',
+@option('validation_file', '-a',
         type=File('r'),
         help="A file of validation samples from FathomFox's Vectorizer, used to graph validation loss so you can see when you start to overfit")
 @option('--learning-rate', '-l',
@@ -141,7 +147,11 @@ Bias: {bias}""".format(coeffs=pretty_coeffs, bias=dict_params['0.bias'][0])
 @option('--comment', '-c',
         default='',
         help='Additional comment to append to the Tensorboard run name, for display in the web UI')
-def main(training_file, validation_file, learning_rate, decay, iterations, comment):
+@option('--verbose', '-v',
+        default=False,
+        is_flag=True,
+        help='Show additional diagnostics that may help with ruleset debugging')
+def main(training_file, validation_file, learning_rate, decay, iterations, comment, verbose):
     full_comment = '.LR={l},d={d},i={i}{c}'.format(
             l=learning_rate,
             d=decay,
@@ -150,7 +160,8 @@ def main(training_file, validation_file, learning_rate, decay, iterations, comme
     training_data = data_from_file(training_file)
     x, y, num_yes = tensors_from(training_data['pages'])
     if validation_file:
-        validation_ins, validation_outs, _ = tensors_from(data_from_file(validation_file)['pages'])
+        validation_data = data_from_file(validation_file)
+        validation_ins, validation_outs, _ = tensors_from(validation_data['pages'])
         validation_arg = validation_ins, validation_outs
     else:
         validation_arg = None
@@ -159,7 +170,9 @@ def main(training_file, validation_file, learning_rate, decay, iterations, comme
     print('Training accuracy per tag:', accuracy_per_tag(model, x, y))
     if validation_file:
         print('Validation accuracy per tag:', accuracy_per_tag(model, validation_ins, validation_outs))
-    print('Accuracy per page:', accuracy_per_page(model, training_data['pages']))
+    print('Training accuracy per page:', accuracy_per_page(model, training_data['pages'], verbose=verbose))
+    if validation_file:
+        print('Validation accuracy per page:', accuracy_per_page(model, validation_data['pages'], verbose=verbose))
 
 
 if __name__ == '__main__':
