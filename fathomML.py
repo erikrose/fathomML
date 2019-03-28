@@ -3,6 +3,7 @@
 from json import load
 from sys import argv
 
+from click import argument, command, File, option, progressbar
 from tensorboardX import SummaryWriter
 import torch
 from torch import no_grad
@@ -14,8 +15,8 @@ def tensor(some_list):
     return torch.tensor(some_list, dtype=torch.float)
 
 
-def data_from_file(filename):
-    return load(open(filename, 'r'))
+def data_from_file(file):
+    return load(file)
 
 
 def tensors_from(pages):
@@ -33,48 +34,42 @@ def tensors_from(pages):
     return tensor(xs), tensor(ys), num_targets
 
 
-def learn(x, y, validation_ins, validation_outs, run_comment=''):
+def learn(learning_rate, decay, iterations, x, y, validation=None, run_comment=''):
     # Define a neural network using high-level modules.
     writer = SummaryWriter(comment=run_comment)
     model = Sequential(
         Linear(len(x[0]), len(y[0]), bias=True)  # 9 inputs -> 1 output
     )
-
     loss_fn = BCEWithLogitsLoss(reduction='sum')  # reduction=mean converges slower.
 
-    learning_rate = .1
-    for t in range(4000):
-        y_pred = model(x)                   # Make predictions.
-        loss = loss_fn(y_pred, y)           # Compute the loss.
-        writer.add_scalar('loss', loss, t)
-        writer.add_scalar('validation_loss', loss_fn(model(validation_ins), validation_outs), t)
-        writer.add_scalar('training_accuracy_per_tag', accuracy_per_tag(model, x, y), t)
-        writer.add_scalar('avg_abs_offness_per_tag', offness_per_tag(model, x, y), t)
-        # See if values are getting super small or large and floating point
-        # precision limits are taking over and making the loss function grow:
-        writer.add_scalar('coeff_abs_sum', list(model.parameters())[0].abs().sum().item(), t)
+    if validation:
+        validation_ins, validation_outs = validation
+    with progressbar(range(iterations)) as bar:
+        for t in bar:
+            y_pred = model(x)                   # Make predictions.
+            loss = loss_fn(y_pred, y)           # Compute the loss.
+            writer.add_scalar('loss', loss, t)
+            if validation:
+                writer.add_scalar('validation_loss', loss_fn(model(validation_ins), validation_outs), t)
+            writer.add_scalar('training_accuracy_per_tag', accuracy_per_tag(model, x, y), t)
+            # See if values are getting super small or large and floating point
+            # precision limits are taking over and making the loss function grow:
+            #writer.add_scalar('coeff_abs_sum', list(model.parameters())[0].abs().sum().item(), t)
 
-        model.zero_grad()                   # Zero-clear the gradients.
-        loss.backward()                     # Compute the gradients.
+            model.zero_grad()                   # Zero-clear the gradients.
+            loss.backward()                     # Compute the gradients.
 
-        with no_grad():
-            for param in model.parameters():
-                param -= learning_rate * param.grad   # Update the parameters using SGD.
-        if not t % 100:
-            print(t)
+            with no_grad():
+                for param in model.parameters():
+                    param -= learning_rate * param.grad   # Update the parameters using SGD.
+            learning_rate *= decay
+            if not t % 100:
+                print(t, 'of', iterations, 'done.')
 
     # Horizontal axis is what confidence. Vertical is how many samples were that confidence.
     writer.add_histogram('confidence', confidences(model, x), t)
     writer.close()
     return model
-
-
-def offness_per_tag(model, x, y):
-    """Return the average absolute offness of the prediction."""
-    offness = 0
-    for (i, input) in enumerate(x):
-        offness += abs(model(input).sigmoid().item() - y[i].item())
-    return offness / len(x)
 
 
 def accuracy_per_tag(model, x, y):
@@ -113,9 +108,6 @@ def accuracy_per_page(model, pages):
     return successes / len(pages)
 
 
-# Consider: passing a weight= or pos_weight= kwarg to BCEWithLogitsLoss to make the tags that should trigger a 1 output louder. This trades off precision and recall.
-
-
 def pretty_output(model, feature_names):
     """Format coefficient and bias numbers for easy pasting into JS."""
     dict_params = {}
@@ -128,21 +120,45 @@ def pretty_output(model, feature_names):
 Bias: {bias}""".format(coeffs=pretty_coeffs, bias=dict_params['0.bias'][0])
 
 
-def main():
-    training_file = argv[1]
-    validation_file = argv[2]
-    if len(argv) > 3:
-        run_comment = argv[3]
-    else:
-        run_comment = ''
-    model = learn(x, y, validation_ins, validation_outs, run_comment=run_comment)
+@command()
+@argument('training_file',
+          type=File('r'))
+@option('validation_file', '-v',
+        type=File('r'),
+        help="A file of validation samples from FathomFox's Vectorizer, used to graph validation loss so you can see when you start to overfit")
+@option('--learning-rate', '-l',
+        default=.1,
+        show_default=True,
+        help='The learning rate to start from')
+@option('--decay', '-d',
+        default=.99,
+        show_default=True,
+        help='The factor by which to multiply the learning rate on each iteration')
+@option('--iterations', '-i',
+        default=300,
+        show_default=True,
+        help='The number of training iterations to run through')
+@option('--comment', '-c',
+        default='',
+        help='Additional comment to append to the Tensorboard run name, for display in the web UI')
+def main(training_file, validation_file, learning_rate, decay, iterations, comment):
+    full_comment = '.LR={l},d={d},i={i}{c}'.format(
+            l=learning_rate,
+            d=decay,
+            i=iterations,
+            c=(',' + comment) if comment else '')
     training_data = data_from_file(training_file)
     x, y, num_yes = tensors_from(training_data['pages'])
-    validation_ins, validation_outs, _ = tensors_from(data_from_file(validation_file)['pages'])
+    if validation_file:
+        validation_ins, validation_outs, _ = tensors_from(data_from_file(validation_file)['pages'])
+        validation_arg = validation_ins, validation_outs
+    else:
+        validation_arg = None
+    model = learn(learning_rate, decay, iterations, x, y, validation=validation_arg, run_comment=full_comment)
     print(pretty_output(model, training_data['header']['featureNames']))
-    # [-25.3036,  67.5860,  -0.7264,  36.5506] yields 97.7% per-tag accuracy! Got there with a learning rate of 0.1 and 500 iterations.
     print('Training accuracy per tag:', accuracy_per_tag(model, x, y))
-    print('Validation accuracy per tag:', accuracy_per_tag(model, validation_ins, validation_outs))
+    if validation_file:
+        print('Validation accuracy per tag:', accuracy_per_tag(model, validation_ins, validation_outs))
     print('Accuracy per page:', accuracy_per_page(model, training_data['pages']))
 
 
